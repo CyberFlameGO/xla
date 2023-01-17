@@ -1117,15 +1117,15 @@ const Shape& PjRtCApiBuffer::on_device_shape() const {
   return shape_.value();
 }
 
-void PjRtCApiBuffer::set_shape() {
+static Shape GetDeviceShape(bool is_logical_on_device_shape,
+                            PJRT_Buffer* c_buffer, const PJRT_Api* api) {
   PJRT_Buffer_OnDeviceTrimmedShape_Args args;
   args.struct_size = PJRT_Buffer_OnDeviceTrimmedShape_Args_STRUCT_SIZE;
   args.priv = nullptr;
-  args.buffer = buffer_.get();
+  args.buffer = c_buffer;
+  args.is_logical_on_device_shape = is_logical_on_device_shape;
 
-  pjrt::LogFatalIfPjrtError(
-      client_->pjrt_c_api()->PJRT_Buffer_OnDeviceTrimmedShape(&args),
-      client_->pjrt_c_api());
+  pjrt::LogFatalIfPjrtError(api->PJRT_Buffer_OnDeviceTrimmedShape(&args), api);
 
   xla::PrimitiveType element_type =
       static_cast<xla::PrimitiveType>(args.element_type);
@@ -1141,8 +1141,6 @@ void PjRtCApiBuffer::set_shape() {
   if (args.has_layout) {
     *(trimmed_shape.mutable_layout()) = ApiConverter::FromC(&args.layout);
   }
-
-  shape_ = trimmed_shape;
 
   // TODO(amangu): Refactor the deletion.
   if (args.dimensions.size > TPU_C_API_MAX_INLINED) {
@@ -1162,6 +1160,17 @@ void PjRtCApiBuffer::set_shape() {
       delete[] args.layout.tiles.heap;
     }
   }
+  return trimmed_shape;
+}
+
+void PjRtCApiBuffer::set_shape() {
+  shape_ = GetDeviceShape(/*is_logical_on_device_shape=*/false, buffer_.get(),
+                          client_->pjrt_c_api());
+}
+
+StatusOr<Shape> PjRtCApiBuffer::logical_on_device_shape() {
+  return GetDeviceShape(/*is_logical_on_device_shape=*/true, buffer_.get(),
+                        client_->pjrt_c_api());
 }
 
 PjRtFuture<Status> PjRtCApiBuffer::ToLiteral(MutableLiteralBase* literal) {

@@ -982,6 +982,7 @@ struct PJRT_Buffer_OnDeviceTrimmedShape_Args {
   Int64List dimensions;         // out
   BoolList dynamic_dimensions;  // out
   bool has_layout;
+  bool is_logical_on_device_shape;
   XLA_Layout layout;  // out
 };
 PJRT_DEFINE_STRUCT_TRAITS(PJRT_Buffer_OnDeviceTrimmedShape_Args, layout);
