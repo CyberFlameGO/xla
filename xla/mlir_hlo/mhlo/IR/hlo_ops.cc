@@ -7041,7 +7041,8 @@ LogicalResult verifyCrossProgramPrefetchAttr(CrossProgramPrefetchAttr cpp,
 }
 
 // Each DynamicParameterBinding specifies a dynamic parameter, a target
-// parameter, a shape index of each and a target dimension.
+// parameter referring either function input or output, a shape index of each
+// and a target dimension.
 // (1) the parameters must be valid
 // (2) there must be a subshape at the given ShapeIndex for each parameter
 // (3) the given subshape for the dynamic parameter must be of type tensor<i32>
@@ -7053,13 +7054,29 @@ LogicalResult verifyDynamicParameterBinding(DynamicParameterBindingAttr bind,
   func::FuncOp main = module.lookupSymbol<func::FuncOp>("main");
 
   // (1)
-  if (bind.getDynamicParamNum() >= main.getNumArguments() ||
-      bind.getTargetParamNum() >= main.getNumArguments())
+  if (bind.getDynamicParamNum() >= main.getNumArguments())
     return module->emitOpError()
-           << "dynamic_parameter_binding: parameters "
-           << bind.getDynamicParamNum() << " and " << bind.getTargetParamNum()
-           << " out of range. main has only " << main.getNumArguments()
-           << " arguments";
+           << "dynamic_parameter_binding: dynamic parameter "
+           << bind.getDynamicParamNum() << " out of range. main has only "
+           << main.getNumArguments() << " arguments";
+
+  if (bind.getTarget() != DynamicParameterTarget::PARAM &&
+      bind.getTarget() != DynamicParameterTarget::OUTPUT)
+    return module->emitOpError() << "dynamic_parameter_binding: dynamic "
+                                    "parameter target must be PARAM or OUTPUT";
+
+  if (bind.getTarget() == DynamicParameterTarget::PARAM &&
+      bind.getTargetNum() >= main.getNumArguments())
+    return module->emitOpError()
+           << "dynamic_parameter_binding: dynamic parameter "
+           << bind.getTargetNum() << " out of range. main has only "
+           << main.getNumArguments() << " arguments";
+  if (bind.getTarget() == DynamicParameterTarget::OUTPUT &&
+      bind.getTargetNum() >= main.getFunctionType().getNumResults())
+    return module->emitOpError()
+           << "dynamic_parameter_binding: dynamic output "
+           << bind.getTargetNum() << " out of range. main has only "
+           << main.getFunctionType().getNumResults() << " results";
 
   // (2)
   auto dynamicParamSubshape =
@@ -7078,28 +7095,42 @@ LogicalResult verifyDynamicParameterBinding(DynamicParameterBindingAttr bind,
            << "dynamic_parameter_binding: dynamic size must be tensor<i32>";
 
   // (2)
-  auto targetParamSubshape =
-      getTypeFromTupleIndices(
-          main.getArgument(bind.getTargetParamNum()).getType(),
-          bind.getTargetParamIndices())
+  Type targetType;
+  switch (bind.getTarget()) {
+    case DynamicParameterTarget::PARAM:
+      targetType = main.getArgument(bind.getTargetNum()).getType();
+      break;
+    case DynamicParameterTarget::OUTPUT:
+      targetType = main.getFunctionType().getResult(bind.getTargetNum());
+      break;
+    default:
+      return module->emitOpError()
+             << "dynamic_parameter_binding: dynamic parameter target must be "
+                "PARAM or OUTPUT";
+  }
+
+  RankedTensorType targetSubshape =
+      getTypeFromTupleIndices(targetType, bind.getTargetIndices())
           .dyn_cast_or_null<RankedTensorType>();
-  if (!targetParamSubshape)
+
+  if (!targetSubshape)
     return module->emitOpError() << "dynamic_parameter_binding: no ranked "
-                                    "tensor type at target_param_indices: "
-                                 << bind.getTargetParamIndices();
+                                    "tensor type at target_indices: "
+                                 << bind.getTargetIndices();
+
   // (4)
-  if (targetParamSubshape.getRank() <= bind.getTargetParamDimNum())
+  if (targetSubshape.getRank() <= bind.getTargetDimNum())
     return module->emitOpError()
            << "dynamic_parameter_binding: no dimension number "
-           << bind.getTargetParamDimNum() << " in target subshape "
-           << targetParamSubshape;
+           << bind.getTargetDimNum() << " in target subshape "
+           << targetSubshape;
 
   // (5)
-  if (!targetParamSubshape.isDynamicDim(bind.getTargetParamDimNum()))
+  if (!targetSubshape.isDynamicDim(bind.getTargetDimNum()))
     return module->emitOpError()
            << "dynamic_parameter_binding: dimension number "
-           << bind.getTargetParamDimNum() << " in target subshape "
-           << targetParamSubshape << " is not dynamic";
+           << bind.getTargetDimNum() << " in target subshape " << targetSubshape
+           << " is not dynamic";
 
   return success();
 }
