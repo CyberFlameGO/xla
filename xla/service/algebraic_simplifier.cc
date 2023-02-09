@@ -319,6 +319,76 @@ bool IsConvertPairNoOp(const HloInstruction* convert) {
          primitive_util::CastPreservesValues(src_type, intermediate_type);
 }
 
+// Returns true iff larger_fp_type is more expressive than smaller_fp_type
+StatusOr<bool> IsStrictlyLargerFloatingPointType(PrimitiveType smaller_fp_type,
+                                                 PrimitiveType larger_fp_type) {
+  if (smaller_fp_type == F16) {
+    if (larger_fp_type == F32 || larger_fp_type == F64) {
+      return true;
+    } else {
+      return false;
+    }
+  } else if (smaller_fp_type == F32) {
+    if (larger_fp_type == F64) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  return InternalError("Invalid type combination.");
+}
+
+// Remove upcasting converts before an add when the result will be downcast
+// afterwards.
+//
+// convert<TS>(add<TL>(convert<TL>(data1<TS>),
+//                     convert<TL>(data2<TS>)))
+//  where TS is smaller than TL (ex, TS=fp16, TL=fp32)
+// ->
+// add<TS>(data1<TS>, data2<TS>)
+Status RemoveUpcastForAdd(HloInstruction* convert_instruction) {
+  HloInstruction* add_op_1 = nullptr;
+  HloInstruction* add_op_2 = nullptr;
+  HloInstruction* op_1_convert = nullptr;
+  HloInstruction* op_2_convert = nullptr;
+  HloInstruction* add_instr = nullptr;
+  HloInstruction* final_convert_instr = nullptr;
+
+  auto add_pattern = m::Convert(
+      &final_convert_instr,
+      m::Add(&add_instr,
+             m::Convert(&op_1_convert, m::Op(&add_op_1)).WithOneUser(),
+             m::Convert(&op_2_convert, m::Op(&add_op_2)).WithOneUser()));
+
+  if (!Match(convert_instruction, add_pattern)) {
+    return OkStatus();
+  }
+  const PrimitiveType op_1_type = add_op_1->shape().element_type();
+  const PrimitiveType op_2_type = add_op_2->shape().element_type();
+  const PrimitiveType final_type = final_convert_instr->shape().element_type();
+  if (op_1_type != final_type || op_2_type != final_type) {
+    // This is not the convert pattern that we're looking for.
+    return OkStatus();
+  }
+  const PrimitiveType add_type = add_instr->shape().element_type();
+  TF_ASSIGN_OR_RETURN(bool is_larger_type,
+                      IsStrictlyLargerFloatingPointType(final_type, add_type));
+  if (!is_larger_type) {
+    // This is not the type-convert pattern that we're looking for.
+    return OkStatus();
+  }
+
+  // Change the type of the add to the smaller type
+  HloComputation* computation = convert_instruction->parent();
+  HloInstruction* new_add =
+      computation->AddInstruction(add_instr->CloneWithNewOperands(
+          ShapeUtil::ChangeElementType(add_instr->shape(), final_type),
+          {add_op_1, add_op_2}));
+  TF_RETURN_IF_ERROR(
+      computation->ReplaceInstruction(final_convert_instr, new_add));
+  return OkStatus();
+}
+
 PrecisionConfig SwapOperandsInDotPrecisionConfig(PrecisionConfig config) {
   CHECK_EQ(config.operand_precision_size(), 2);
   std::swap(config.mutable_operand_precision()->at(0),
@@ -3766,7 +3836,8 @@ Status AlgebraicSimplifierVisitor::HandleConvert(HloInstruction* convert) {
     return ReplaceInstruction(convert,
                               convert->mutable_operand(0)->mutable_operand(0));
   }
-  return OkStatus();
+
+  return RemoveUpcastForAdd(convert);
 }
 
 // Complex(Real(c), Imag(c)) -> c

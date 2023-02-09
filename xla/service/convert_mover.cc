@@ -57,6 +57,7 @@ bool OpCommutesWithConvert(HloOpcode opcode) {
     case HloOpcode::kReshape:
     case HloOpcode::kSlice:
     case HloOpcode::kTranspose:
+    case HloOpcode::kMaximum:
       return true;
     default:
       return false;
