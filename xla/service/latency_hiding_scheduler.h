@@ -25,6 +25,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/inlined_vector.h"
 #include "xla/service/hlo_alias_analysis.h"
 #include "xla/service/hlo_cost_analysis.h"
@@ -79,6 +80,7 @@ struct SchedulerConfig {
   bool use_real_cost_model = false;
   bool aggressive_scheduling_policies = false;
   uint64_t memory_limit = UINT64_MAX;
+  std::string latency_estimator_profile_path = "";
 };
 
 // Class used estimate latency between instructions and cost of HLOs.
@@ -113,6 +115,28 @@ class ApproximateLatencyEstimator : public LatencyEstimator {
   static constexpr TimeCost kLowCost = 1.0;
   static constexpr TimeCost kMediumCost = 1000.0;
   static constexpr TimeCost kHighCost = 5000.0;
+};
+
+// Implementation of LatencyEstimator using a profile to estimate HLO cost and
+// latencies between instructions. If a cost is not known, it will forward to
+// an underlying model-based estimator.
+class ProfileGuidedLatencyEstimator : public LatencyEstimator {
+ public:
+  TimeCost GetLatencyBetween(const HloGraphNode& from,
+                             const HloGraphNode& target) const override;
+  TimeCost NodeCost(const HloInstruction* instr) const override;
+  int CyclesPerMicrosecond() const override;
+
+  ProfileGuidedLatencyEstimator(
+      const SchedulerConfig& config,
+      std::unique_ptr<LatencyEstimator> latency_estimator,
+      const ProfiledInstructionsProto& proto);
+
+ private:
+  const SchedulerConfig config_;
+  std::unique_ptr<LatencyEstimator> latency_estimator_;
+  // Maps HLO instruction name to timestamp and duration.
+  absl::flat_hash_map<std::string, std::pair<TimeCost, TimeCost>> instr_map_;
 };
 
 // Helper class to keep track of which instructions are to be supported and
@@ -649,8 +673,7 @@ class DefaultSchedulerCore : public SchedulerCore {
           latency_estimator(latency_estimator),
           async_tracker(async_tracker),
           memory_pressure_tracker(memory_pressure_tracker),
-          config(config) {
-    }
+          config(config) {}
   };
 
  protected:

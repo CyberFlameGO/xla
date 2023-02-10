@@ -33,6 +33,7 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_schedule.h"
 #include "xla/service/async_collective_creator.h"
 #include "xla/tests/hlo_test_base.h"
+#include "xla/xla.pb.h"
 #include "tsl/lib/core/status_test_util.h"
 
 namespace xla {
@@ -2591,6 +2592,66 @@ TEST_F(LatencyHidingSchedulerTest, AsyncTrackerTestForTargetDefinedResources) {
   CHECK_EQ(async_tracker_for_my_target.GetNumAvailableResources(
                target_resource0_index),
            target_resource0_overlap_limit);
+}
+
+TEST_F(LatencyHidingSchedulerTest, TestProfileGuidedLatencyEstimator) {
+  absl::string_view hlo_string = R"(
+HloModule module, is_scheduled=true
+
+ENTRY entry {
+  p0 = f32[16,64,256]{2,1,0} parameter(0)
+  p1 = f32[16,64,256]{2,1,0} parameter(1)
+  p2 = f32[1024,2048,2048]{2,1,0} parameter(2)
+  p3 = f32[2048,2048,2048]{2,1,0} parameter(3)
+  cp1s = (f32[1024,2048,2048]{2,1,0}, f32[1024,2048,2048]{2,1,0}, u32[], u32[]) collective-permute-start(p2), source_target_pairs={{1,0},{0,3},{3,2}}
+  cp2s = (f32[2048,2048,2048]{2,1,0}, f32[2048,2048,2048]{2,1,0}, u32[], u32[]) collective-permute-start(p3), source_target_pairs={{1,0},{0,3},{3,2}}
+  c0 = f32[16,256,256]{2,1,0} convolution(p0, p1),
+    window={size=16 stride=15 lhs_dilate=16}, dim_labels=0fb_0io->0fb,
+    metadata={op_type="AllToAll" op_name="c0"}
+  cp1d = f32[1024,2048,2048]{2,1,0} collective-permute-done(cp1s)
+  cp2d = f32[2048,2048,2048]{2,1,0} collective-permute-done(cp2s)
+  ROOT tuple.2 = (f32[16,256,256]{2,1,0}, f32[1024,2048,2048]{2,1,0}, f32[2048,2048,2048]{2,1,0}) tuple(c0, cp1d, cp2d)
+}
+)";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto hlo_module, ParseHloText(hlo_string));
+  HloSchedule& module_schedule = hlo_module->schedule();
+  EXPECT_TRUE(hlo_module->has_entry_computation());
+
+  std::string profiled_instructions_text_proto = R"pb(
+    instructions { name: "cp1s" timestamp_us: 0.0 duration_us: 1.0 }
+    instructions { name: "cp1d" timestamp_us: 1.0 duration_us: 40.0 }
+    instructions { name: "cp2s" timestamp_us: 41.0 duration_us: 1.0 }
+    instructions { name: "cp2d" timestamp_us: 42.0 duration_us: 80.0 }
+    instructions { name: "c0" timestamp_us: 122.0 duration_us: 10.0 }
+  )pb";
+  ProfiledInstructionsProto profiled_instructions_proto;
+  ASSERT_TRUE(proto2::TextFormat::ParseFromString(
+      profiled_instructions_text_proto, &profiled_instructions_proto));
+
+  auto sched_config = GetDefaultSchedConfig();
+  sched_config.collective_permute_overlap_limit = 2;
+  sched_config.all_gather_overlap_limit = 2;
+  auto latency_estimator = std::make_unique<ProfileGuidedLatencyEstimator>(
+      sched_config, std::make_unique<ApproximateLatencyEstimator>(),
+      profiled_instructions_proto);
+  EXPECT_TRUE(RunScheduler(hlo_module.get(), GetDefaultSchedConfig(),
+                           std::move(latency_estimator))
+                  .ok());
+  EXPECT_TRUE(hlo_module->has_entry_computation());
+
+  std::vector<HloInstruction*> new_instruction_sequence =
+      module_schedule.sequence(hlo_module->entry_computation()).instructions();
+  if (VLOG_IS_ON(1)) {
+    for (auto* new_i : new_instruction_sequence) {
+      VLOG(1) << new_i->ToString();
+    }
+  }
+
+  // cp2s should come first since the duration between cp2s->cp2d is double that
+  // of cp1s->cp1d
+  EXPECT_LT(GetIndex(new_instruction_sequence, "cp2s"),
+            GetIndex(new_instruction_sequence, "cp1s"));
 }
 
 }  // namespace xla

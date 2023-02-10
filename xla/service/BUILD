@@ -1133,6 +1133,7 @@ xla_cc_test(
     deps = [
         ":async_collective_creator",
         ":latency_hiding_scheduler",
+        "//xla:xla_proto_cc",
         "//xla/hlo/ir:hlo",
         "//xla/tests:hlo_test_base",
         "//xla/tests:xla_internal_test_main",
