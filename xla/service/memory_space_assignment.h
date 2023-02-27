@@ -1024,6 +1024,39 @@ class MemorySpaceAssignment {
   absl::flat_hash_map<int64_t, std::vector<HloInstruction*>> schedule_before_;
 };
 
+// Config to override prefetch / copy start location for a target
+// instruction, to immediately before/after a reference instruction.
+class OverridePrefetchTime {
+  // Place copy start of operand at operand_number of instruction with name
+  // instruction_name before or after the reference instruction.
+ public:
+  enum class Placement { kBefore, kAfter };
+  std::string instruction_name_;
+  int64_t operand_number_;
+  ShapeIndex operand_index_;
+  Placement placement_;
+  std::string reference_instruction_name_;
+
+  OverridePrefetchTime(std::string inst_name, int64_t op_num, ShapeIndex op_idx,
+                       Placement p, std::string ref_inst_name)
+      : instruction_name_(inst_name),
+        operand_number_(op_num),
+        operand_index_(op_idx),
+        placement_(p),
+        reference_instruction_name_(ref_inst_name) {}
+
+  std::string ToString();
+
+  static StatusOr<std::vector<memory_space_assignment::OverridePrefetchTime>>
+  ParseOverridePrefetchTimesConfig(std::string override_prefetch_times_config);
+
+ private:
+  static StatusOr<ShapeIndex> ParseOperandIndex(std::string config);
+
+  static StatusOr<OverridePrefetchTime> ParseOverridePrefetchTimeConfig(
+      std::string config);
+};
+
 // The different options to be passed to the Run() API.
 struct Options {
   // Backend-specific integer value that describes the alternate memory.
@@ -1156,6 +1189,10 @@ struct Options {
 
   // If true, enforces the FIFO order for prefetches.
   bool enforce_prefetch_fifo_order = false;
+
+  // Config to schedule prefetch times for operands of specific instructions to
+  // before or after given reference instructions.
+  std::vector<OverridePrefetchTime> override_prefetch_times;
 };
 
 // A struct representing an asynchronous copy with its logical start and end
