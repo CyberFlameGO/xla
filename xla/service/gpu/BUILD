@@ -355,6 +355,7 @@ cc_library(
         "@tsl//tsl/platform:logging",
         "@tsl//tsl/platform:human_readable_json",
         "@tsl//tsl/platform:status",
+        "@tsl//tsl/platform:statusor",
         "@tsl//tsl/protobuf:autotuning_proto_cc",
         "@tsl//tsl/protobuf:dnn_proto_cc",
     ] + if_gpu_is_configured([
@@ -711,6 +712,7 @@ cc_library(
         "memset_thunk.cc",
         "outfeed_thunk.cc",
         "replica_id_thunk.cc",
+        "reusable_kernel_thunk.cc",
         "sequential_thunk.cc",
         "while_thunk.cc",
     ],
@@ -727,6 +729,7 @@ cc_library(
         "memset_thunk.h",
         "outfeed_thunk.h",
         "replica_id_thunk.h",
+        "reusable_kernel_thunk.h",
         "sequential_thunk.h",
         "while_thunk.h",
     ],
