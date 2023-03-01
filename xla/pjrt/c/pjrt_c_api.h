@@ -756,8 +756,15 @@ PJRT_DEFINE_STRUCT_TRAITS(PJRT_LoadedExecutable_IsDeleted_Args, is_deleted);
 typedef PJRT_Error* PJRT_LoadedExecutable_IsDeleted(
     PJRT_LoadedExecutable_IsDeleted_Args* args);
 
-// TODO(b/263390038) implement C API to access PJRT_Chunk data and to destroy.
-typedef struct PJRT_Chunk PJRT_Chunk;
+struct PJRT_Chunk {
+  void* data;
+  size_t size;
+  // Holds a copy of the original xla::PjRtChunk deleter. The original
+  // xla::PjRtChunk releases its ownership of `data`, which will subsequently be
+  // managed by `deleter`. `deleter` should be deleted after use.
+  void* deleter;
+};
+
 // TODO(b/263390934) implement C API that calls `AddChunk` and other
 // `xla::CopyToDeviceStream`.
 typedef struct PJRT_CopyToDeviceStream PJRT_CopyToDeviceStream;

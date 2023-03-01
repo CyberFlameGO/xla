@@ -712,8 +712,11 @@ static xla::SendCallback CSendCallbackToCpp(
           const xla::PjRtTransferMetadata& metadata, xla::PjRtChunk input,
           size_t total_size_in_bytes, bool done) -> xla::Status {
         PJRT_TransferMetadata c_metadata{metadata.device_shape};
-        PJRT_Chunk c_chunk{std::move(input)};
-
+        PJRT_Chunk c_chunk{input.data(), (size_t)input.size(),
+                           new std::function(input.deleter())};
+        // Release the ownership of `input.data()`, so it can be managed
+        // by `c_chunk.deleter`.
+        input.release();
         // TODO(b/267255088) retrieve up the callback error message.
         bool success = callback(&c_metadata, &c_chunk, total_size_in_bytes,
                                 done, user_arg);
@@ -725,7 +728,7 @@ static xla::SendCallback CSendCallbackToCpp(
       }};
 }
 
-// TODO(yeounoh) Create new libtpu C++ callbacks that does the following:
+// Create new libtpu C++ callbacks that does the following:
 // - convert libtpu PjRtTransferMetadata to PJRT_TransferMetadata, etc.
 // - call C API callback with the converted arguments
 static void CSendCallbackListsToCpp(

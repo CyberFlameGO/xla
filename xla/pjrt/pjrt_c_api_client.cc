@@ -752,9 +752,17 @@ PJRT_SendCallbackInfo CppSendCallbackToC(
     xla::Shape shape = metadata->device_shape;
     xla::Status status = send_callback(
         xla::PjRtTransferMetadata{shape},
-        // TODO(b/263390038) use PJRT_Chunk C API
-        // instead of accessing the opaque type's field directly.
-        xla::PjRtChunk(std::move(chunk->chunk)), total_size_in_bytes, done);
+        xla::PjRtChunk(
+            chunk->data, chunk->size,
+            // The reinterpretation is safe because `chunk->deleter` is
+            // internal C interface deleter for `chunk->data`, that captures
+            // the client C++ std::function<void(void*)> deleter.
+            [deleter = reinterpret_cast<std::function<void(void*)>*>(
+                 chunk->deleter)](void* ptr) {
+              (*deleter)(ptr);
+              delete deleter;
+            }),
+        total_size_in_bytes, done);
     if (!status.ok()) {
       return false;
     }

@@ -248,6 +248,16 @@ class PjRtChunk {
   uint8_t* data() { return data_; }
   const uint8_t* data() const { return data_; }
   int64_t size() const { return size_; }
+  std::function<void(void*)> deleter() const { return deleter_; }
+
+  // Release the ownership of the `data_`. Note that this does not free `data_`,
+  // the caller should copy `data_` and `deleter_` to manage the ownership
+  // outside the dtor before the release.
+  void release() {
+    data_ = nullptr;
+    size_ = 0;
+    deleter_ = nullptr;
+  }
 
  private:
   // The ownership of the bytes pointed to by `data_` is controlled by the
