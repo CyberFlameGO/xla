@@ -1461,8 +1461,6 @@ Shape GetPerGroupBaseShape(const GroupedSharding& grouped_sharding,
   return result;
 }
 
-namespace {
-
 HloInstruction* GetInGroupPartitionId(
     HloInstruction* partition_id,
     const std::vector<std::vector<int64_t>>& device_groups, SpmdBuilder* b) {
@@ -1480,6 +1478,8 @@ HloInstruction* GetInGroupPartitionId(
       b->AddInstruction(HloInstruction::CreateDynamicSlice(
           ShapeUtil::MakeShape(U32, {1}), id_table, {partition_id}, {1}))));
 }
+
+namespace {
 
 SPMDCollectiveOpsCreator GetPerGroupCollectiveOpsCreator(
     const SPMDCollectiveOpsCreator& creator,
