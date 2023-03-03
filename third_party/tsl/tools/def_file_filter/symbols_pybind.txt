@@ -32,7 +32,7 @@ tensorflow::IsBuiltWithNvcc
 tensorflow::GpuSupportsHalfMatMulAndConv
 tensorflow::IsMklEnabled
 
-[//tensorflow/compiler/xla/stream_executor:stream_executor_pimpl] # stat_summarizer
+[//third_party/xla/xla/stream_executor:stream_executor_pimpl] # stat_summarizer
 stream_executor::StreamExecutor::EnablePeerAccessTo
 stream_executor::StreamExecutor::CanEnablePeerAccessTo
 
@@ -409,14 +409,14 @@ tsl::profiler::RemoteProfilerSession::GetServiceAddress
 tsl::profiler::RemoteProfilerSession::WaitForCompletion
 tsl::profiler::RemoteProfilerSession::~RemoteProfilerSession
 
-[//tensorflow/compiler/xla:status_macros] # tfcompile
+[//third_party/xla/xla:status_macros] # tfcompile
 xla::status_macros::MakeErrorStream::Impl::Impl
 xla::status_macros::MakeErrorStream::Impl::~Impl
 xla::status_macros::MakeErrorStream::Impl::GetStatus
 xla::status_macros::MakeErrorStream::CheckNotDone
 xla::status_macros::MakeErrorStream::add_ret_check_failure
 
-[//tensorflow/compiler/xla/hlo/ir:hlo] # tfcompile
+[//third_party/xla/xla/hlo/ir:hlo] # tfcompile
 xla::DfsHloVisitorBase::SetVisited
 xla::DfsHloVisitorBase<class xla::HloInstruction.*>::SetVisited
 xla::HloComputation::Accept
