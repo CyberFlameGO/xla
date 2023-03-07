@@ -16,8 +16,8 @@ limitations under the License.
 #include "xla/service/topk_rewriter.h"
 
 #include "xla/hlo/ir/hlo_module.h"
+#include "xla/hlo/utils/hlo_matchers.h"
 #include "xla/service/hlo_dce.h"
-#include "xla/service/hlo_matchers.h"
 #include "xla/tests/hlo_test_base.h"
 #include "xla/tests/test_macros.h"
 #include "xla/tests/test_utils.h"
