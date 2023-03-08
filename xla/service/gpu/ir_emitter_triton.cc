@@ -218,10 +218,10 @@ void CreateTritonPipeline(mlir::OpPassManager& pm,
   pm.addPass(mlir::createTritonGPUCoalescePass());
   pm.addPass(mlir::createTritonGPUAccelerateMatmulPass(ccAsInt));
   pm.addPass(mlir::createTritonGPURemoveLayoutConversionsPass());
-  pm.addPass(mlir::createTritonGPUFuseTranspositionsPass());
+  pm.addPass(mlir::createTritonGPUOptimizeDotOperandsPass());
   pm.addPass(mlir::createTritonGPUPipelinePass(num_stages));
   pm.addPass(mlir::createTritonGPUPrefetchPass());
-  pm.addPass(mlir::createTritonGPUFuseTranspositionsPass());
+  pm.addPass(mlir::createTritonGPUOptimizeDotOperandsPass());
   pm.addPass(mlir::createTritonGPURemoveLayoutConversionsPass());
   pm.addPass(mlir::createTritonGPUDecomposeConversionsPass());
   if (cc.major == se::CudaComputeCapability::VOLTA) {
